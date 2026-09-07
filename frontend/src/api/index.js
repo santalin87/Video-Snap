@@ -1,7 +1,10 @@
 import axios from 'axios'
 
-// 根据运行环境自动选择 API 地址
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+// 生产环境：VITE_API_BASE_URL 指向 VPS 后端（通过 GitHub Secrets 注入）
+// 开发环境：Vite proxy 会转发 /api 到本地 :8000，所以默认用 /api
+const BASE_URL = import.meta.env.VITE_API_BASE_URL
+  ? `${import.meta.env.VITE_API_BASE_URL}/api`
+  : '/api'
 
 const http = axios.create({
   baseURL: BASE_URL,

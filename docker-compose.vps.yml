@@ -1,0 +1,19 @@
+# VPS 专用 Docker Compose（只运行后端）
+# 前端由 GitHub Pages 托管，Cloudflare 负责 HTTPS
+
+services:
+  backend:
+    build: ./backend
+    container_name: vidsnap-backend
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # Cloudflare 代理模式下只需要 80 端口
+      # Cloudflare 会在边缘节点终止 HTTPS，内部用 HTTP 与 VPS 通信
+      - "80:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

@@ -12,8 +12,8 @@ from .routes.parse import router as parse_router
 load_dotenv()
 
 app = FastAPI(
-    title="downX API",
-    description="自托管多平台视频解析服务（NewPipe 模式）",
+    title="VidSnap API",
+    description="自托管多平台视频解析服务 — NewPipe 模式，零流量消耗",
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
