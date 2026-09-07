@@ -1,0 +1,220 @@
+"""
+YouTube 解析服务 — NewPipe 模式
+核心原则：只解析，不下载。返回直链给浏览器直接取。
+
+筛选规则：
+  - 视频格式：acodec != none AND vcodec != none AND height <= 720
+    （保证是预合并的音视频文件，下载后直接有声音）
+  - 音频格式：vcodec == none（纯音频流）
+  - 字幕：自动生成字幕 + 手动字幕，支持 SRT/VTT
+"""
+import os
+import yt_dlp
+
+from ..models import AudioFormat, Formats, ParseResponse, SubtitleFormat, VideoFormat
+
+# yt-dlp 通用配置（不下载，只读取信息）
+_YDL_OPTS = {
+    "quiet": True,
+    "no_warnings": True,
+    "skip_download": True,
+    "extract_flat": False,
+}
+
+# 如果设置了代理则注入
+_PROXY = os.getenv("YTDLP_PROXY")
+if _PROXY:
+    _YDL_OPTS["proxy"] = _PROXY
+
+
+def _bytes_to_mb(filesize: int | None) -> float | None:
+    if filesize:
+        return round(filesize / (1024 * 1024), 1)
+    return None
+
+
+def _pick_video_formats(formats: list[dict]) -> list[VideoFormat]:
+    """
+    筛选≤720p 的预合并格式（含音频），去重并按画质从高到低排列。
+    """
+    seen_heights = set()
+    results = []
+
+    # 按分辨率降序排列
+    sorted_fmts = sorted(
+        formats,
+        key=lambda f: f.get("height") or 0,
+        reverse=True,
+    )
+
+    for f in sorted_fmts:
+        height = f.get("height")
+        if not height or height > 720:
+            continue
+        # 必须同时有音频和视频
+        if f.get("acodec") == "none" or f.get("vcodec") == "none":
+            continue
+        # 必须有可用的直链
+        url = f.get("url")
+        if not url:
+            continue
+        # 去重（同分辨率只保留第一个，通常码率最高）
+        if height in seen_heights:
+            continue
+        seen_heights.add(height)
+
+        ext = f.get("ext", "mp4")
+        results.append(
+            VideoFormat(
+                quality=f"{height}p",
+                ext=ext,
+                size_mb=_bytes_to_mb(f.get("filesize") or f.get("filesize_approx")),
+                url=url,
+            )
+        )
+
+    return results
+
+
+def _pick_audio_formats(formats: list[dict]) -> list[AudioFormat]:
+    """
+    筛选纯音频流，优先 m4a（兼容性好），再给 webm/opus。
+    """
+    results = []
+    seen_exts = set()
+
+    # 按码率降序
+    sorted_fmts = sorted(
+        formats,
+        key=lambda f: f.get("abr") or f.get("tbr") or 0,
+        reverse=True,
+    )
+
+    quality_labels = {0: "标准", 1: "高品质", 2: "极高品质"}
+    idx = 0
+
+    for f in sorted_fmts:
+        if f.get("vcodec") != "none":
+            continue
+        url = f.get("url")
+        if not url:
+            continue
+        ext = f.get("ext", "m4a")
+        if ext in seen_exts:
+            continue
+        if ext not in ("m4a", "mp3", "webm", "opus"):
+            continue
+        seen_exts.add(ext)
+
+        abr = int(f.get("abr") or f.get("tbr") or 0)
+        label = quality_labels.get(idx, "其他")
+        idx += 1
+
+        results.append(
+            AudioFormat(
+                quality=label,
+                ext=ext,
+                abr=abr if abr else None,
+                url=url,
+            )
+        )
+
+    return results[:3]  # 最多返回3个音频选项
+
+
+def _pick_subtitles(
+    subtitles: dict, auto_captions: dict
+) -> list[SubtitleFormat]:
+    """
+    合并手动字幕与自动字幕，优先 SRT，再 VTT。
+    """
+    results = []
+
+    # 合并两个来源（手动字幕优先）
+    all_subs: dict[str, list] = {}
+    for lang, entries in (auto_captions or {}).items():
+        all_subs[lang] = entries
+    for lang, entries in (subtitles or {}).items():
+        all_subs[lang] = entries  # 手动字幕覆盖自动
+
+    PREFERRED_EXTS = ["srt", "vtt", "json3"]
+
+    for lang, entries in all_subs.items():
+        # 找最优格式
+        chosen = None
+        for preferred in PREFERRED_EXTS:
+            for entry in entries:
+                if entry.get("ext") == preferred and entry.get("url"):
+                    chosen = entry
+                    break
+            if chosen:
+                break
+
+        if not chosen:
+            continue
+
+        # 生成友好标签
+        label = _lang_label(lang)
+        results.append(
+            SubtitleFormat(
+                lang=lang,
+                label=label,
+                ext=chosen["ext"],
+                url=chosen["url"],
+            )
+        )
+
+    # 中文优先排列
+    results.sort(key=lambda s: (0 if "zh" in s.lang else 1, s.lang))
+    return results
+
+
+def _lang_label(lang: str) -> str:
+    """将语言代码转为友好标签。"""
+    mapping = {
+        "zh-Hans": "中文（简体）",
+        "zh-Hant": "中文（繁体）",
+        "zh": "中文",
+        "en": "English",
+        "ja": "日本語",
+        "ko": "한국어",
+        "fr": "Français",
+        "de": "Deutsch",
+        "es": "Español",
+        "pt": "Português",
+        "ru": "Русский",
+        "ar": "العربية",
+    }
+    return mapping.get(lang, lang)
+
+
+def parse(url: str) -> ParseResponse:
+    """
+    解析 YouTube URL，返回视频信息和可用下载格式。
+    不下载任何文件，仅返回 CDN 直链。
+    """
+    with yt_dlp.YoutubeDL(_YDL_OPTS) as ydl:
+        info = ydl.extract_info(url, download=False)
+
+    if not info:
+        raise ValueError("无法获取视频信息，请检查 URL 是否有效")
+
+    raw_formats = info.get("formats", [])
+
+    formats = Formats(
+        video=_pick_video_formats(raw_formats),
+        audio=_pick_audio_formats(raw_formats),
+        subtitles=_pick_subtitles(
+            info.get("subtitles", {}),
+            info.get("automatic_captions", {}),
+        ),
+    )
+
+    return ParseResponse(
+        platform="youtube",
+        title=info.get("title", "未知标题"),
+        author=info.get("uploader") or info.get("channel"),
+        thumbnail=info.get("thumbnail"),
+        duration=int(info.get("duration") or 0) or None,
+        formats=formats,
+    )

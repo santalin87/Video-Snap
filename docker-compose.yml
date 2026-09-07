@@ -1,0 +1,25 @@
+services:
+  backend:
+    build: ./backend
+    container_name: downx-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - ALLOWED_ORIGINS=http://localhost,http://localhost:80,https://${DOMAIN:-localhost}
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build: ./frontend
+    container_name: downx-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
