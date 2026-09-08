@@ -7,7 +7,7 @@
           <span class="icon">🎬</span>
           <span class="title">视频下载</span>
         </div>
-        <span class="hint">直链高速下载</span>
+        <span class="hint-tag">⚡ 直连官方 CDN · 0 服务器流量</span>
       </div>
 
       <div class="row-controls">
@@ -26,22 +26,31 @@
         </div>
 
         <div class="actions">
-          <a
-            :href="getDownloadUrl(selectedVideoUrl, suggestFilename(currentVideo, 'video'))"
-            class="btn btn-blue"
-          >
-            <span class="arrow">↓</span> 直接下载
-          </a>
+          <!-- 核心推荐：直连 CDN 下载，零耗费 VPS 流量 -->
           <a
             :href="selectedVideoUrl"
+            :download="suggestFilename(currentVideo, 'video')"
             target="_blank"
             rel="noopener noreferrer"
-            class="btn-secondary"
-            title="在新标签页打开原始 CDN 直链"
+            class="btn btn-blue"
+            title="直连官方 CDN 下载，完全不消耗你的 VPS 流量"
           >
-            CDN直链
+            <span class="arrow">↓</span> 直链下载
           </a>
+
+          <!-- 复制链接按钮，极度方便放进下载工具或浏览器直接下 -->
+          <button
+            type="button"
+            class="btn-secondary"
+            @click="copyUrl(selectedVideoUrl, 'video')"
+          >
+            {{ copiedType === 'video' ? '✓ 已复制' : '复制直链' }}
+          </button>
         </div>
+      </div>
+
+      <div class="tip-bar">
+        💡 <b>0 流量下载技巧</b>：右键「直链下载」选择 <b>“链接另存为...”</b> 即可直接保存；若在新标签播放，点击播放器右下角 <b>⋮ ➔「下载」</b>。
       </div>
     </div>
 
@@ -52,7 +61,7 @@
           <span class="icon">🎵</span>
           <span class="title">音频提取</span>
         </div>
-        <span class="hint">纯音频格式 (无画面)</span>
+        <span class="hint-tag">⚡ 直连官方 CDN · 0 服务器流量</span>
       </div>
 
       <div class="row-controls">
@@ -71,21 +80,28 @@
 
         <div class="actions">
           <a
-            :href="getDownloadUrl(selectedAudioUrl, suggestFilename(currentAudio, 'audio'))"
-            class="btn btn-green"
-          >
-            <span class="arrow">↓</span> 直接下载
-          </a>
-          <a
             :href="selectedAudioUrl"
+            :download="suggestFilename(currentAudio, 'audio')"
             target="_blank"
             rel="noopener noreferrer"
-            class="btn-secondary"
-            title="在新标签页打开原始 CDN 直链"
+            class="btn btn-green"
+            title="直连官方 CDN 下载，完全不消耗你的 VPS 流量"
           >
-            CDN直链
+            <span class="arrow">↓</span> 直链下载
           </a>
+
+          <button
+            type="button"
+            class="btn-secondary"
+            @click="copyUrl(selectedAudioUrl, 'audio')"
+          >
+            {{ copiedType === 'audio' ? '✓ 已复制' : '复制直链' }}
+          </button>
         </div>
+      </div>
+
+      <div class="tip-bar">
+        💡 <b>0 流量下载技巧</b>：右键「直链下载」选择 <b>“链接另存为...”</b> 保存为纯音频文件。
       </div>
     </div>
 
@@ -96,7 +112,7 @@
           <span class="icon">📄</span>
           <span class="title">字幕文件</span>
         </div>
-        <span class="hint">共 {{ formats.subtitles.length }} 种语言可用</span>
+        <span class="hint-tag">共 {{ formats.subtitles.length }} 种语言可用</span>
       </div>
 
       <div class="row-controls">
@@ -114,35 +130,36 @@
 
         <div class="actions">
           <a
-            :href="getDownloadUrl(selectedSubUrl, currentSubFilename)"
-            class="btn btn-dark"
-          >
-            <span class="arrow">↓</span> 直接下载
-          </a>
-          <a
             :href="selectedSubUrl"
+            :download="currentSubFilename"
             target="_blank"
             rel="noopener noreferrer"
-            class="btn-secondary"
-            title="在新标签页打开原始字幕文件"
+            class="btn btn-dark"
           >
-            源文件
+            <span class="arrow">↓</span> 下载字幕
           </a>
+
+          <button
+            type="button"
+            class="btn-secondary"
+            @click="copyUrl(selectedSubUrl, 'sub')"
+          >
+            {{ copiedType === 'sub' ? '✓ 已复制' : '复制链接' }}
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- 底部提示说明 -->
+    <!-- 底部保障说明 -->
     <div class="footer-note">
       <span class="dot" />
-      直链由平台官方 CDN 直接返回，具有时效性，请在解析后尽快点击下载。
+      <b>NewPipe 原生直链架构</b>：视频和音频直接从官方 CDN 传到你的浏览器，不经过 VPS 中转，<b>完全不消耗你的 VPS 免费流量额度</b>。
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { getDownloadUrl } from '../api/index.js'
 
 const props = defineProps({
   formats: {
@@ -159,6 +176,7 @@ const props = defineProps({
 const selectedVideoUrl = ref('')
 const selectedAudioUrl = ref('')
 const selectedSubUrl   = ref('')
+const copiedType       = ref('')
 
 watch(
   () => props.formats,
@@ -199,6 +217,16 @@ const currentSubFilename = computed(() => {
   const base = sanitize(props.title)
   return `${base}_${s.lang}.${s.ext}`
 })
+
+function copyUrl(url, type) {
+  if (!url) return
+  navigator.clipboard.writeText(url).then(() => {
+    copiedType.value = type
+    setTimeout(() => {
+      copiedType.value = ''
+    }, 2000)
+  })
+}
 </script>
 
 <style scoped>
@@ -256,14 +284,19 @@ const currentSubFilename = computed(() => {
   border: 1px solid #e2e8f0;
 }
 
-.hint {
-  font-size: 12px;
-  color: #94a3b8;
+.hint-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: #059669;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 2px 8px;
+  border-radius: 999px;
 }
 
 .row-controls {
   display: flex;
-  gap: 12px;
+  gap: 10px;
 }
 
 @media (max-width: 600px) {
@@ -327,14 +360,13 @@ const currentSubFilename = computed(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 10px 12px;
+  padding: 10px 14px;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
-  color: #64748b;
+  color: #475569;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
-  text-decoration: none;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s ease;
@@ -380,20 +412,44 @@ const currentSubFilename = computed(() => {
   background: #0f172a;
 }
 
+.tip-bar {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid #f1f5f9;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.tip-bar b {
+  color: #334155;
+}
+
 .footer-note {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #64748b;
-  padding: 8px 4px 0;
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #d1fae5;
+  padding: 10px 16px;
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
+.footer-note b {
+  font-weight: 700;
 }
 
 .dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #059669;
   display: inline-block;
+  flex-shrink: 0;
 }
 </style>
