@@ -35,43 +35,63 @@ def _bytes_to_mb(filesize: int | None) -> float | None:
 
 def _pick_video_formats(formats: list[dict]) -> list[VideoFormat]:
     """
-    筛选≤720p 的预合并格式（含音频），去重并按画质从高到低排列。
+    筛选所有可用画质（1080p/720p/480p/360p等），优先 MP4，优先含音频版本。
     """
-    seen_heights = set()
+    seen = set()
     results = []
 
-    # 按分辨率降序排列
+    # 按分辨率降序排列，同分辨率优先 MP4，优先有音频的
     sorted_fmts = sorted(
         formats,
-        key=lambda f: f.get("height") or 0,
+        key=lambda f: (
+            f.get("height") or 0,
+            1 if f.get("ext") == "mp4" else 0,
+            1 if (f.get("acodec") and f.get("acodec") != "none") else 0,
+            f.get("tbr") or 0,
+        ),
         reverse=True,
     )
 
     for f in sorted_fmts:
         height = f.get("height")
-        if not height or height > 720:
+        if not height:
             continue
-        # 必须同时有音频和视频
-        if f.get("acodec") == "none" or f.get("vcodec") == "none":
+        if f.get("vcodec") == "none":
             continue
-        # 必须有可用的直链
         url = f.get("url")
         if not url:
             continue
-        # 去重（同分辨率只保留第一个，通常码率最高）
-        if height in seen_heights:
-            continue
-        seen_heights.add(height)
 
         ext = f.get("ext", "mp4")
+        key = (height, ext)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        has_audio = bool(f.get("acodec") and f.get("acodec") != "none")
+        note = "含音频" if has_audio else "视频流"
+
+        filesize = f.get("filesize") or f.get("filesize_approx")
+
         results.append(
             VideoFormat(
                 quality=f"{height}p",
                 ext=ext,
-                size_mb=_bytes_to_mb(f.get("filesize") or f.get("filesize_approx")),
+                size_mb=_bytes_to_mb(filesize),
                 url=url,
+                note=note,
             )
         )
+
+    # 再次去重：每个分辨率只保留最优的一个格式（优先 MP4，保证下拉列表整洁）
+    final_results = []
+    seen_heights = set()
+    for item in results:
+        if item.quality not in seen_heights:
+            seen_heights.add(item.quality)
+            final_results.append(item)
+
+    return final_results
 
     return results
 

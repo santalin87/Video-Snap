@@ -1,91 +1,124 @@
 <template>
-  <div class="format-list">
-
-    <!-- 视频格式 -->
-    <section v-if="formats.video?.length" class="section">
-      <h3 class="section-title">🎬 视频（含音频）</h3>
-      <div class="items">
-        <a
-          v-for="f in formats.video"
-          :key="f.url"
-          :href="f.url"
-          :download="suggestFilename(f, 'video')"
-          class="format-item"
-          target="_blank"
-          rel="noopener noreferrer"
-          @click="onDownload(f, 'video')"
-        >
-          <div class="item-left">
-            <span class="quality-badge quality-video">{{ f.quality }}</span>
-            <span class="ext-tag">{{ f.ext.toUpperCase() }}</span>
-            <span v-if="f.note" class="note-tag">{{ f.note }}</span>
-          </div>
-          <div class="item-right">
-            <span v-if="f.size_mb" class="size-label">{{ f.size_mb }} MB</span>
-            <span class="download-icon">⬇</span>
-          </div>
-        </a>
+  <div class="download-panel">
+    <!-- 视频下载卡片 -->
+    <div v-if="formats.video?.length" class="download-row">
+      <div class="row-header">
+        <div class="badge badge-video">
+          <span class="icon">🎬</span>
+          <span class="title">视频下载</span>
+        </div>
+        <span class="hint">直链高速下载</span>
       </div>
-    </section>
 
-    <!-- 音频格式 -->
-    <section v-if="formats.audio?.length" class="section">
-      <h3 class="section-title">🎵 纯音频</h3>
-      <div class="items">
-        <a
-          v-for="f in formats.audio"
-          :key="f.url"
-          :href="f.url"
-          :download="suggestFilename(f, 'audio')"
-          class="format-item"
-          target="_blank"
-          rel="noopener noreferrer"
-          @click="onDownload(f, 'audio')"
-        >
-          <div class="item-left">
-            <span class="quality-badge quality-audio">{{ f.quality }}</span>
-            <span class="ext-tag">{{ f.ext.toUpperCase() }}</span>
-            <span v-if="f.abr" class="abr-label">{{ f.abr }}kbps</span>
-          </div>
-          <div class="item-right">
-            <span class="download-icon">⬇</span>
-          </div>
-        </a>
-      </div>
-    </section>
+      <div class="row-controls">
+        <div class="select-wrap">
+          <select v-model="selectedVideoUrl" class="custom-select">
+            <option
+              v-for="f in formats.video"
+              :key="f.url"
+              :value="f.url"
+            >
+              {{ f.quality }} · {{ f.ext.toUpperCase() }}
+              {{ f.note ? ` (${f.note})` : '' }}
+              {{ f.size_mb ? ` · ${f.size_mb} MB` : '' }}
+            </option>
+          </select>
+        </div>
 
-    <!-- 字幕 -->
-    <section v-if="formats.subtitles?.length" class="section">
-      <h3 class="section-title">📄 字幕</h3>
-      <div class="items subtitle-items">
         <a
-          v-for="s in formats.subtitles"
-          :key="s.url"
-          :href="s.url"
-          :download="`subtitle_${s.lang}.${s.ext}`"
-          class="format-item"
+          :href="selectedVideoUrl"
+          :download="suggestFilename(currentVideo, 'video')"
+          class="btn btn-blue"
           target="_blank"
           rel="noopener noreferrer"
         >
-          <div class="item-left">
-            <span class="quality-badge quality-sub">{{ s.label }}</span>
-            <span class="ext-tag">{{ s.ext.toUpperCase() }}</span>
-          </div>
-          <div class="item-right">
-            <span class="download-icon">⬇</span>
-          </div>
+          <span class="arrow">↓</span> 下载视频
         </a>
       </div>
-    </section>
+    </div>
 
-    <!-- 有效期提示 -->
-    <p class="expiry-notice">
-      ⚠️ 直链有时效性（通常 6 小时内有效），请尽快下载
-    </p>
+    <!-- 音频下载卡片 -->
+    <div v-if="formats.audio?.length" class="download-row">
+      <div class="row-header">
+        <div class="badge badge-audio">
+          <span class="icon">🎵</span>
+          <span class="title">音频提取</span>
+        </div>
+        <span class="hint">纯音频格式 (无画面)</span>
+      </div>
+
+      <div class="row-controls">
+        <div class="select-wrap">
+          <select v-model="selectedAudioUrl" class="custom-select">
+            <option
+              v-for="a in formats.audio"
+              :key="a.url"
+              :value="a.url"
+            >
+              {{ a.quality }} · {{ a.ext.toUpperCase() }}
+              {{ a.abr ? ` · ${a.abr}kbps` : '' }}
+            </option>
+          </select>
+        </div>
+
+        <a
+          :href="selectedAudioUrl"
+          :download="suggestFilename(currentAudio, 'audio')"
+          class="btn btn-green"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span class="arrow">↓</span> 下载音频
+        </a>
+      </div>
+    </div>
+
+    <!-- 字幕下载卡片 -->
+    <div v-if="formats.subtitles?.length" class="download-row">
+      <div class="row-header">
+        <div class="badge badge-sub">
+          <span class="icon">📄</span>
+          <span class="title">字幕文件</span>
+        </div>
+        <span class="hint">共 {{ formats.subtitles.length }} 种语言可用</span>
+      </div>
+
+      <div class="row-controls">
+        <div class="select-wrap">
+          <select v-model="selectedSubUrl" class="custom-select">
+            <option
+              v-for="s in formats.subtitles"
+              :key="s.url"
+              :value="s.url"
+            >
+              {{ s.label }} ({{ s.lang }}) · {{ s.ext.toUpperCase() }}
+            </option>
+          </select>
+        </div>
+
+        <a
+          :href="selectedSubUrl"
+          :download="currentSubFilename"
+          class="btn btn-dark"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span class="arrow">↓</span> 下载字幕
+        </a>
+      </div>
+    </div>
+
+    <!-- 底部提示说明 -->
+    <div class="footer-note">
+      <span class="dot" />
+      直链由平台官方 CDN 直接返回，具有时效性，请在解析后尽快点击下载。
+    </div>
   </div>
 </template>
 
 <script setup>
+import { computed, ref, watch } from 'vue'
+
 const props = defineProps({
   formats: {
     type: Object,
@@ -97,135 +130,217 @@ const props = defineProps({
   },
 })
 
+// 默认选中项
+const selectedVideoUrl = ref('')
+const selectedAudioUrl = ref('')
+const selectedSubUrl   = ref('')
+
+watch(
+  () => props.formats,
+  (newVal) => {
+    if (newVal.video?.length)     selectedVideoUrl.value = newVal.video[0].url
+    if (newVal.audio?.length)     selectedAudioUrl.value = newVal.audio[0].url
+    if (newVal.subtitles?.length) selectedSubUrl.value   = newVal.subtitles[0].url
+  },
+  { immediate: true }
+)
+
+const currentVideo = computed(() =>
+  props.formats.video?.find((f) => f.url === selectedVideoUrl.value) || props.formats.video?.[0]
+)
+
+const currentAudio = computed(() =>
+  props.formats.audio?.find((a) => a.url === selectedAudioUrl.value) || props.formats.audio?.[0]
+)
+
+const currentSub = computed(() =>
+  props.formats.subtitles?.find((s) => s.url === selectedSubUrl.value) || props.formats.subtitles?.[0]
+)
+
 function sanitize(str) {
   return (str || 'video').replace(/[\\/:*?"<>|]/g, '_').slice(0, 60)
 }
 
-function suggestFilename(f, type) {
+function suggestFilename(item, type) {
+  if (!item) return 'download'
   const base = sanitize(props.title)
-  if (type === 'audio') return `${base}_audio.${f.ext}`
-  return `${base}_${f.quality}.${f.ext}`
+  if (type === 'audio') return `${base}_audio.${item.ext}`
+  return `${base}_${item.quality}.${item.ext}`
 }
 
-function onDownload(f, type) {
-  // 可在此埋点统计（可选）
-  console.log(`[downX] 下载 ${type} ${f.quality} ${f.ext}`)
-}
+const currentSubFilename = computed(() => {
+  const s = currentSub.value
+  if (!s) return 'subtitle.srt'
+  const base = sanitize(props.title)
+  return `${base}_${s.lang}.${s.ext}`
+})
 </script>
 
 <style scoped>
-.format-list {
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
-}
-
-.section {
-  border-top: 1px solid #f3f4f6;
-  padding: 16px 20px;
-}
-
-.section:first-child {
-  border-top: none;
-}
-
-.section-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin: 0 0 12px;
-}
-
-.items {
+.download-panel {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
-.subtitle-items {
-  flex-direction: row;
-  flex-wrap: wrap;
+.download-row {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  transition: border-color 0.15s ease;
 }
 
-.format-item {
+.download-row:hover {
+  border-color: #cbd5e1;
+}
+
+.row-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
-  border-radius: 10px;
-  border: 1.5px solid #e5e7eb;
-  text-decoration: none;
-  color: inherit;
-  cursor: pointer;
-  transition: all 0.15s;
+  margin-bottom: 12px;
 }
 
-.format-item:hover {
-  border-color: #6366f1;
-  background: #f5f3ff;
-}
-
-.item-left {
-  display: flex;
+.badge {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-}
-
-.item-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.quality-badge {
+  gap: 6px;
   font-size: 13px;
-  font-weight: 700;
-  padding: 2px 8px;
+  font-weight: 600;
+  padding: 3px 10px;
   border-radius: 6px;
 }
 
-.quality-video { background: #dbeafe; color: #1d4ed8; }
-.quality-audio { background: #d1fae5; color: #065f46; }
-.quality-sub   { background: #fef3c7; color: #92400e; }
+.badge-video {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #dbeafe;
+}
 
-.ext-tag {
-  font-size: 11px;
-  color: #9ca3af;
+.badge-audio {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.badge-sub {
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+
+.hint {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.row-controls {
+  display: flex;
+  gap: 12px;
+}
+
+@media (max-width: 600px) {
+  .row-controls {
+    flex-direction: column;
+  }
+}
+
+.select-wrap {
+  flex: 1;
+  position: relative;
+}
+
+.custom-select {
+  width: 100%;
+  appearance: none;
+  background-color: #f8fafc;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 40px 10px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #0f172a;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.custom-select:focus {
+  background-color: #ffffff;
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
   font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
 }
 
-.note-tag {
-  font-size: 11px;
-  color: #059669;
-  background: #d1fae5;
-  padding: 1px 6px;
-  border-radius: 4px;
+.arrow {
+  font-size: 15px;
+  font-weight: bold;
 }
 
-.abr-label {
+/* 纯蓝按钮 */
+.btn-blue {
+  background: #2563eb;
+  color: #ffffff;
+  border: 1px solid #1d4ed8;
+}
+.btn-blue:hover {
+  background: #1d4ed8;
+}
+
+/* 纯绿按钮 */
+.btn-green {
+  background: #059669;
+  color: #ffffff;
+  border: 1px solid #047857;
+}
+.btn-green:hover {
+  background: #047857;
+}
+
+/* 深灰/黑底按钮 */
+.btn-dark {
+  background: #1e293b;
+  color: #ffffff;
+  border: 1px solid #0f172a;
+}
+.btn-dark:hover {
+  background: #0f172a;
+}
+
+.footer-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
-  color: #6b7280;
+  color: #64748b;
+  padding: 8px 4px 0;
 }
 
-.size-label {
-  font-size: 12px;
-  color: #9ca3af;
-}
-
-.download-icon {
-  font-size: 16px;
-  color: #6366f1;
-}
-
-.expiry-notice {
-  font-size: 12px;
-  color: #9ca3af;
-  text-align: center;
-  padding: 12px 20px 16px;
-  margin: 0;
-  border-top: 1px solid #f3f4f6;
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #059669;
+  display: inline-block;
 }
 </style>
