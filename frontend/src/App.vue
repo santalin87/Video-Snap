@@ -2,18 +2,31 @@
   <div id="app">
     <!-- 头部导航 -->
     <header class="app-header">
-      <div class="logo">
-        <span class="logo-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-          </svg>
-        </span>
-        <span class="logo-text">VidSnap</span>
+      <div class="header-top">
+        <div class="logo">
+          <span class="logo-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </span>
+          <span class="logo-text">VidSnap</span>
+        </div>
+
+        <button class="btn-engine-setting" @click="showEngineModal = true">
+          <span class="setting-icon">⚙️</span>
+          <span>组件与引擎管理</span>
+        </button>
       </div>
-      <p class="logo-subtitle">自托管多平台音视频高速解析 · 零中转 · 直连下载</p>
+      <p class="logo-subtitle">自托管多平台音视频高速解析 · 模块化插件 · 零中转直连</p>
     </header>
+
+    <!-- 插件与引擎管理弹窗 -->
+    <EngineModal
+      :visible="showEngineModal"
+      @close="showEngineModal = false"
+    />
 
     <!-- 主体区域 -->
     <main class="main">
@@ -70,6 +83,7 @@
 <script setup>
 import { ref } from 'vue'
 import { parseUrl } from './api/index.js'
+import EngineModal from './components/EngineModal.vue'
 import FormatList from './components/FormatList.vue'
 import UrlInput from './components/UrlInput.vue'
 import VideoCard from './components/VideoCard.vue'
@@ -78,6 +92,7 @@ const urlInputRef = ref(null)
 const loading     = ref(false)
 const parseError  = ref('')
 const result      = ref(null)
+const showEngineModal = ref(false)
 
 async function handleParse(url) {
   loading.value    = true
@@ -123,14 +138,46 @@ body {
 <style scoped>
 .app-header {
   text-align: center;
-  padding: 44px 20px 24px;
+  padding: 36px 20px 20px;
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 680px;
+  margin: 0 auto 8px;
 }
 
 .logo {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 6px;
+}
+
+.btn-engine-setting {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-engine-setting:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.setting-icon {
+  font-size: 14px;
 }
 
 .logo-icon {
