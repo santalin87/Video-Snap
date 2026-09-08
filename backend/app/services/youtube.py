@@ -35,14 +35,20 @@ def _bytes_to_mb(filesize: int | None) -> float | None:
 
 def _pick_video_formats(formats: list[dict]) -> list[VideoFormat]:
     """
-    筛选所有可用画质（1080p/720p/480p/360p等），优先 MP4，优先含音频版本。
+    筛选所有可用真实视频文件（1080p/720p/480p/360p等），排除 m3u8 切片清单，优先 MP4。
     """
-    seen = set()
-    results = []
+    # 过滤掉无法直接下载的 m3u8 / manifest 链接，只保留直链音视频文件
+    valid_fmts = [
+        f for f in formats
+        if f.get("vcodec") != "none"
+        and f.get("url")
+        and "manifest.googlevideo.com" not in f.get("url", "")
+        and not str(f.get("protocol", "")).startswith("m3u8")
+    ]
 
     # 按分辨率降序排列，同分辨率优先 MP4，优先有音频的
     sorted_fmts = sorted(
-        formats,
+        valid_fmts,
         key=lambda f: (
             f.get("height") or 0,
             1 if f.get("ext") == "mp4" else 0,
@@ -52,11 +58,12 @@ def _pick_video_formats(formats: list[dict]) -> list[VideoFormat]:
         reverse=True,
     )
 
+    seen = set()
+    results = []
+
     for f in sorted_fmts:
         height = f.get("height")
         if not height:
-            continue
-        if f.get("vcodec") == "none":
             continue
         url = f.get("url")
         if not url:
@@ -83,7 +90,7 @@ def _pick_video_formats(formats: list[dict]) -> list[VideoFormat]:
             )
         )
 
-    # 再次去重：每个分辨率只保留最优的一个格式（优先 MP4，保证下拉列表整洁）
+    # 再次去重：每个分辨率只保留最优的一个格式（优先 MP4）
     final_results = []
     seen_heights = set()
     for item in results:
@@ -93,19 +100,25 @@ def _pick_video_formats(formats: list[dict]) -> list[VideoFormat]:
 
     return final_results
 
-    return results
-
 
 def _pick_audio_formats(formats: list[dict]) -> list[AudioFormat]:
     """
-    筛选纯音频流，优先 m4a（兼容性好），再给 webm/opus。
+    筛选纯音频流，优先 m4a（兼容性好），再给 webm/opus。排除 m3u8。
     """
+    valid_fmts = [
+        f for f in formats
+        if f.get("vcodec") == "none"
+        and f.get("url")
+        and "manifest.googlevideo.com" not in f.get("url", "")
+        and not str(f.get("protocol", "")).startswith("m3u8")
+    ]
+
     results = []
     seen_exts = set()
 
     # 按码率降序
     sorted_fmts = sorted(
-        formats,
+        valid_fmts,
         key=lambda f: f.get("abr") or f.get("tbr") or 0,
         reverse=True,
     )

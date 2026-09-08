@@ -81,3 +81,39 @@ async def parse_url(body: ParseRequest):
         )
 
     return result
+
+
+@router.get(
+    "/download",
+    summary="直接下载文件",
+    description="通过流式中转添加 Content-Disposition 附件头，使浏览器直接弹出保存窗口而不是在标签页播放",
+)
+async def direct_download(url: str, filename: str = "download"):
+    if not url:
+        raise HTTPException(status_code=400, detail="URL 不能为空")
+
+    import urllib.parse
+    import httpx
+    from fastapi.responses import StreamingResponse
+
+    safe_filename = urllib.parse.quote(filename)
+
+    async def stream_media():
+        client_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        }
+        async with httpx.AsyncClient(follow_redirects=True, timeout=120.0) as client:
+            async with client.stream("GET", url, headers=client_headers) as resp:
+                async for chunk in resp.aiter_bytes(chunk_size=131072):
+                    yield chunk
+
+    response_headers = {
+        "Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}",
+        "Access-Control-Expose-Headers": "Content-Disposition",
+    }
+
+    return StreamingResponse(
+        stream_media(),
+        media_type="application/octet-stream",
+        headers=response_headers,
+    )

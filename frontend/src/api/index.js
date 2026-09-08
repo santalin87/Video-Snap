@@ -22,9 +22,12 @@ export async function parseUrl(url) {
 }
 
 /**
- * 健康检查
+ * 生成带 Content-Disposition 附件头的直接下载 URL
+ * 触发浏览器原生下载管理器，而不是打开媒体播放器
  */
-export async function healthCheck() {
-  const response = await http.get('/health')
-  return response.data
+export function getDownloadUrl(targetUrl, filename) {
+  const encodedUrl = encodeURIComponent(targetUrl)
+  const encodedName = encodeURIComponent(filename)
+  return `${BASE_URL}/download?url=${encodedUrl}&filename=${encodedName}`
 }
+

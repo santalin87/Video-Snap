@@ -25,15 +25,23 @@
           </select>
         </div>
 
-        <a
-          :href="selectedVideoUrl"
-          :download="suggestFilename(currentVideo, 'video')"
-          class="btn btn-blue"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <span class="arrow">↓</span> 下载视频
-        </a>
+        <div class="actions">
+          <a
+            :href="getDownloadUrl(selectedVideoUrl, suggestFilename(currentVideo, 'video'))"
+            class="btn btn-blue"
+          >
+            <span class="arrow">↓</span> 直接下载
+          </a>
+          <a
+            :href="selectedVideoUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-secondary"
+            title="在新标签页打开原始 CDN 直链"
+          >
+            CDN直链
+          </a>
+        </div>
       </div>
     </div>
 
@@ -61,15 +69,23 @@
           </select>
         </div>
 
-        <a
-          :href="selectedAudioUrl"
-          :download="suggestFilename(currentAudio, 'audio')"
-          class="btn btn-green"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <span class="arrow">↓</span> 下载音频
-        </a>
+        <div class="actions">
+          <a
+            :href="getDownloadUrl(selectedAudioUrl, suggestFilename(currentAudio, 'audio'))"
+            class="btn btn-green"
+          >
+            <span class="arrow">↓</span> 直接下载
+          </a>
+          <a
+            :href="selectedAudioUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-secondary"
+            title="在新标签页打开原始 CDN 直链"
+          >
+            CDN直链
+          </a>
+        </div>
       </div>
     </div>
 
@@ -96,15 +112,23 @@
           </select>
         </div>
 
-        <a
-          :href="selectedSubUrl"
-          :download="currentSubFilename"
-          class="btn btn-dark"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <span class="arrow">↓</span> 下载字幕
-        </a>
+        <div class="actions">
+          <a
+            :href="getDownloadUrl(selectedSubUrl, currentSubFilename)"
+            class="btn btn-dark"
+          >
+            <span class="arrow">↓</span> 直接下载
+          </a>
+          <a
+            :href="selectedSubUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-secondary"
+            title="在新标签页打开原始字幕文件"
+          >
+            源文件
+          </a>
+        </div>
       </div>
     </div>
 
@@ -118,6 +142,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { getDownloadUrl } from '../api/index.js'
 
 const props = defineProps({
   formats: {
@@ -277,12 +302,18 @@ const currentSubFilename = computed(() => {
   box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
 }
 
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 10px 20px;
+  padding: 10px 18px;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
@@ -290,6 +321,28 @@ const currentSubFilename = computed(() => {
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s ease;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.btn-secondary:hover {
+  background: #e2e8f0;
+  color: #0f172a;
 }
 
 .arrow {
