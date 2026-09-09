@@ -55,8 +55,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: frontend
-          tagName: v__VERSION__
-          releaseName: 'VidSnap v__VERSION__'
+          tagName: ${{ github.ref_name }}
+          releaseName: 'VidSnap ${{ github.ref_name }}'
           releaseBody: 'VidSnap 跨平台桌面端极速下载器 (Windows / macOS / Linux)。零 VPS 流量，跑满本地宽带。'
           releaseDraft: false
           prerelease: false
