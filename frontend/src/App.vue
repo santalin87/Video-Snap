@@ -30,41 +30,67 @@
 
     <!-- 主体区域 -->
     <main class="main">
-      <!-- 链接输入框 -->
-      <UrlInput
-        ref="urlInputRef"
-        :loading="loading"
-        :error="parseError"
-        @submit="handleParse"
-      />
+      <!-- 模式切换标签 -->
+      <div class="nav-tabs">
+        <button
+          class="tab-btn"
+          :class="{ active: activeTab === 'download' }"
+          @click="activeTab = 'download'"
+        >
+          📥 视频解析下载
+        </button>
+        <button
+          class="tab-btn"
+          :class="{ active: activeTab === 'cleaner' }"
+          @click="activeTab = 'cleaner'"
+        >
+          🧽 视频去抬头净化 (防国内查重)
+        </button>
+      </div>
 
-      <!-- 解析结果展示区 -->
-      <Transition name="fade">
-        <div v-if="result" class="result-area">
-          <VideoCard :info="result" />
-          <FormatList :formats="result.formats" :title="result.title" />
-        </div>
-      </Transition>
+      <!-- 视图 1: 视频解析与下载 -->
+      <div v-show="activeTab === 'download'" class="tab-content">
+        <!-- 链接输入框 -->
+        <UrlInput
+          ref="urlInputRef"
+          :loading="loading"
+          :error="parseError"
+          @submit="handleParse"
+        />
 
-      <!-- 空态引导提示 -->
-      <div v-if="!result && !loading" class="empty-state">
-        <div class="empty-guide-card">
-          <div class="guide-title">使用方法</div>
-          <div class="steps">
-            <div class="step-item">
-              <span class="step-num">1</span>
-              <span>复制平台视频链接</span>
-            </div>
-            <div class="step-item">
-              <span class="step-num">2</span>
-              <span>粘贴到上方输入框点击「解析」</span>
-            </div>
-            <div class="step-item">
-              <span class="step-num">3</span>
-              <span>下拉选择清晰度/音频并下载</span>
+        <!-- 解析结果展示区 -->
+        <Transition name="fade">
+          <div v-if="result" class="result-area">
+            <VideoCard :info="result" />
+            <FormatList :formats="result.formats" :title="result.title" />
+          </div>
+        </Transition>
+
+        <!-- 空态引导提示 -->
+        <div v-if="!result && !loading" class="empty-state">
+          <div class="empty-guide-card">
+            <div class="guide-title">使用方法</div>
+            <div class="steps">
+              <div class="step-item">
+                <span class="step-num">1</span>
+                <span>复制平台视频链接</span>
+              </div>
+              <div class="step-item">
+                <span class="step-num">2</span>
+                <span>粘贴到上方输入框点击「解析」</span>
+              </div>
+              <div class="step-item">
+                <span class="step-num">3</span>
+                <span>下拉选择清晰度/音频并下载</span>
+              </div>
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- 视图 2: 视频去抬头合规净化 -->
+      <div v-show="activeTab === 'cleaner'" class="tab-content">
+        <VideoCleaner />
       </div>
     </main>
 
@@ -87,12 +113,14 @@ import EngineModal from './components/EngineModal.vue'
 import FormatList from './components/FormatList.vue'
 import UrlInput from './components/UrlInput.vue'
 import VideoCard from './components/VideoCard.vue'
+import VideoCleaner from './components/VideoCleaner.vue'
 
 const urlInputRef = ref(null)
 const loading     = ref(false)
 const parseError  = ref('')
 const result      = ref(null)
 const showEngineModal = ref(false)
+const activeTab   = ref('download')
 
 async function handleParse(url) {
   loading.value    = true
@@ -209,6 +237,49 @@ body {
   max-width: 680px;
   margin: 0 auto;
   padding: 0 16px 48px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.nav-tabs {
+  display: flex;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 10px;
+  gap: 4px;
+  border: 1px solid #e2e8f0;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.tab-btn:hover {
+  color: #0f172a;
+}
+
+.tab-btn.active {
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.tab-content {
   width: 100%;
   display: flex;
   flex-direction: column;
