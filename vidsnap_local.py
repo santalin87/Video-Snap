@@ -153,7 +153,16 @@ def main():
     print("\n🚀 正在开始全速下载，请查看下方实时速度与进度条：\n")
     try:
         with yt_dlp.YoutubeDL(download_opts) as ydl:
-            ydl.download([url])
+            ret = ydl.extract_info(url, download=True)
+            # 获取实际下载的文件名并进行抬头清洗
+            if ret:
+                downloaded_file = ydl.prepare_filename(ret)
+                # 兼容合并后的 mp4 扩展名
+                if download_opts.get("merge_output_format"):
+                    downloaded_file = os.path.splitext(downloaded_file)[0] + "." + download_opts["merge_output_format"]
+                if choice == "4":
+                    downloaded_file = os.path.splitext(downloaded_file)[0] + ".mp3"
+                clean_file_metadata(downloaded_file)
 
         print("\n" + "=" * 55)
         print("🎉 下载完成！")
@@ -167,6 +176,30 @@ def main():
         print(f"\n下载出错: {e}")
 
     input("\n按回车键退出程序...")
+
+
+def clean_file_metadata(file_path):
+    """使用 FFmpeg 抹除海外平台元数据与特征抬头（防国内平台下架与查重）"""
+    if not file_path or not os.path.exists(file_path):
+        return
+    temp_file = file_path + ".clean.tmp"
+    cmd = [
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-i", file_path,
+        "-map_metadata", "-1",
+        "-metadata:s:v:0", "handler_name=VideoHandler",
+        "-metadata:s:a:0", "handler_name=SoundHandler",
+        "-c", "copy",
+        temp_file
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True)
+        if res.returncode == 0 and os.path.exists(temp_file):
+            os.replace(temp_file, file_path)
+            print("✨ [安全合规] 已自动抹除 Google / YouTube / X 特征元数据与平台抬头！")
+    except Exception:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
 
 
 if __name__ == "__main__":
