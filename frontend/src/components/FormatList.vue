@@ -7,7 +7,7 @@
           <span class="icon">🎬</span>
           <span class="title">视频下载</span>
         </div>
-        <span class="hint-tag">⚡ 直连官方 CDN · 0 服务器流量</span>
+        <span class="hint-tag">⚡ 代理分段下载 · 0 VPS 流量</span>
       </div>
 
       <div class="row-controls">
@@ -26,16 +26,13 @@
         </div>
 
         <div class="actions">
-          <!-- 核心推荐：直连 CDN 下载，零耗费 VPS 流量 -->
+          <!-- 核心推荐：经 vidsnap-dl 代理分段下载，附件保存，零耗费 VPS 流量 -->
           <a
-            :href="selectedVideoUrl"
-            :download="suggestFilename(currentVideo, 'video')"
-            target="_blank"
-            rel="noopener noreferrer"
+            :href="videoDownloadUrl"
             class="btn btn-blue"
-            title="直连官方 CDN 下载，完全不消耗你的 VPS 流量"
+            title="经下载代理分段并行下载，直接保存到设备，不消耗 VPS 流量"
           >
-            <span class="arrow">↓</span> 直链下载
+            <span class="arrow">↓</span> 下载视频
           </a>
 
           <!-- 复制链接按钮，极度方便放进下载工具或浏览器直接下 -->
@@ -50,7 +47,7 @@
       </div>
 
       <div class="tip-bar">
-        💡 <b>0 流量下载技巧</b>：右键「直链下载」选择 <b>“链接另存为...”</b> 即可直接保存；若在新标签播放，点击播放器右下角 <b>⋮ ➔「下载」</b>。
+        💡 点击「下载视频」即经代理分段下载并直接保存到设备，不会跳转播放；需要原始直链放进其他下载工具时，点「复制直链」。
       </div>
     </div>
 
@@ -61,7 +58,7 @@
           <span class="icon">🎵</span>
           <span class="title">音频提取</span>
         </div>
-        <span class="hint-tag">⚡ 直连官方 CDN · 0 服务器流量</span>
+        <span class="hint-tag">⚡ 代理分段下载 · 0 VPS 流量</span>
       </div>
 
       <div class="row-controls">
@@ -80,14 +77,11 @@
 
         <div class="actions">
           <a
-            :href="selectedAudioUrl"
-            :download="suggestFilename(currentAudio, 'audio')"
-            target="_blank"
-            rel="noopener noreferrer"
+            :href="audioDownloadUrl"
             class="btn btn-green"
-            title="直连官方 CDN 下载，完全不消耗你的 VPS 流量"
+            title="经下载代理分段并行下载，直接保存到设备，不消耗 VPS 流量"
           >
-            <span class="arrow">↓</span> 直链下载
+            <span class="arrow">↓</span> 下载音频
           </a>
 
           <button
@@ -101,7 +95,7 @@
       </div>
 
       <div class="tip-bar">
-        💡 <b>0 流量下载技巧</b>：右键「直链下载」选择 <b>“链接另存为...”</b> 保存为纯音频文件。
+        💡 点击「下载音频」即经代理下载并直接保存为纯音频文件；需要原始直链时点「复制直链」。
       </div>
     </div>
 
@@ -153,13 +147,14 @@
     <!-- 底部保障说明 -->
     <div class="footer-note">
       <span class="dot" />
-      <b>NewPipe 原生直链架构</b>：视频和音频直接从官方 CDN 传到你的浏览器，不经过 VPS 中转，<b>完全不消耗你的 VPS 免费流量额度</b>。
+      <b>代理分段下载架构</b>：下载经 Cloudflare 代理以多线程分段方式拉取官方 CDN，并以附件形式保存到你的设备，一步直下；不经过 VPS 中转，<b>完全不消耗你的 VPS 免费流量额度</b>。
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { getDownloadUrl } from '../api/index.js'
 
 const props = defineProps({
   formats: {
@@ -210,6 +205,19 @@ function suggestFilename(item, type) {
   if (type === 'audio') return `${base}_audio.${item.ext}`
   return `${base}_${item.quality}.${item.ext}`
 }
+
+// 主下载按钮：经 vidsnap-dl 代理一步直下（附件保存、带文件名）
+const videoDownloadUrl = computed(() =>
+  selectedVideoUrl.value
+    ? getDownloadUrl(selectedVideoUrl.value, suggestFilename(currentVideo.value, 'video'))
+    : '#'
+)
+
+const audioDownloadUrl = computed(() =>
+  selectedAudioUrl.value
+    ? getDownloadUrl(selectedAudioUrl.value, suggestFilename(currentAudio.value, 'audio'))
+    : '#'
+)
 
 const currentSubFilename = computed(() => {
   const s = currentSub.value

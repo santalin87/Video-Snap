@@ -22,12 +22,16 @@ export async function parseUrl(url) {
 }
 
 /**
- * 生成带 Content-Disposition 附件头的直接下载 URL
- * 触发浏览器原生下载管理器，而不是打开媒体播放器
+ * 生成经 vidsnap-dl 下载代理（Cloudflare Worker）的下载 URL
+ * 代理以 Content-Disposition: attachment 返回并分段并行拉取，
+ * 点击即保存到设备，而不是在新标签页打开播放器；
+ * 全程不经过 VPS，不消耗 VPS 流量额度。
  */
+const DOWNLOAD_PROXY = 'https://vidsnap-dl.santalin87.workers.dev/'
+
 export function getDownloadUrl(targetUrl, filename) {
   const encodedUrl = encodeURIComponent(targetUrl)
   const encodedName = encodeURIComponent(filename)
-  return `${BASE_URL}/download?url=${encodedUrl}&filename=${encodedName}`
+  return `${DOWNLOAD_PROXY}?url=${encodedUrl}&filename=${encodedName}&threads=4`
 }
 
