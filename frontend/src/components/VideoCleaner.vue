@@ -2,19 +2,20 @@
   <div class="cleaner-card">
     <div class="cleaner-header">
       <div class="title-wrap">
-        <span class="badge-tag">纯前端 · 零流量 · 秒级净化</span>
+        <span class="badge-tag">纯前端 · 零上传 · 无损流拷贝</span>
         <h3>🧽 视频去抬头与合规清洗工具 (防国内平台封禁查重)</h3>
       </div>
       <p class="desc">
-        直接在你的浏览器内存中抹除 YouTube / Google / X 的底层容器特征（如 <code>ISO Media file produced by Google Inc.</code>），
-        <b>不上传服务器、不耗费流量、无损不重编、0.1 秒搞定</b>，生成的文件可放心在国内平台发布。
+        深度清洗：在浏览器本地用 FFmpeg 对视频做<b>流拷贝重封装</b>，剥除 H.264 / HEVC 码流里的平台 SEI 标记，
+        清空容器元数据与章节，重写编码器标识，并可伪装成 Premiere Pro / DaVinci Resolve / CapCut 的导出文件。
+        <b>不上传服务器、不重编、画质零损失</b>，生成的文件可放心在国内平台发布。
       </p>
     </div>
 
     <!-- 拖拽上传区 -->
     <div
       class="drop-zone"
-      :class="{ 'is-dragging': isDragging, 'is-processing': processing }"
+      :class="{ 'is-dragging': isDragging, 'is-processing': busy }"
       @dragover.prevent="isDragging = true"
       @dragleave.prevent="isDragging = false"
       @drop.prevent="handleDrop"
@@ -23,116 +24,212 @@
       <input
         ref="fileInput"
         type="file"
-        accept="video/mp4,audio/mp4,audio/m4a,video/*"
+        accept="video/mp4,video/quicktime,audio/mp4,audio/m4a,.mp4,.mov,.m4a"
         class="hidden-input"
         @change="handleFileSelect"
       />
 
-      <div v-if="!processing && !resultMsg" class="drop-content">
+      <div v-if="!selectedFile" class="drop-content">
         <span class="upload-icon">📂</span>
         <p class="drop-title">点击选择视频，或将视频文件拖拽到此处</p>
-        <p class="drop-hint">支持 MP4、M4A 格式，文件大小无限制</p>
+        <p class="drop-hint">支持 MP4、MOV、M4A，最大 500 MB · 首次使用需加载约 30MB 视频引擎（仅一次）</p>
       </div>
 
-      <div v-else-if="processing" class="processing-content">
-        <div class="spinner-blue" />
-        <p class="processing-text">正在极速清洗元数据特征...</p>
+      <div v-else class="file-content" @click.stop>
+        <span class="upload-icon">🎬</span>
+        <p class="file-name">{{ selectedFile.name }}</p>
+        <p class="drop-hint">{{ fmtSize(selectedFile.size) }} · 点击上方区域可重新选择</p>
       </div>
+    </div>
 
-      <div v-else class="result-content">
-        <span class="success-icon">✅</span>
-        <p class="success-text">{{ resultMsg }}</p>
-        <button class="btn-again" @click.stop="resetCleaner">继续清洗下一个</button>
+    <!-- 预设与操作 -->
+    <div v-if="selectedFile" class="controls" @click.stop>
+      <label class="preset-label" for="presetSel">伪装导出预设</label>
+      <select id="presetSel" v-model="presetKey" class="preset-select" :disabled="busy">
+        <option v-for="(p, k) in PRESETS" :key="k" :value="k">{{ p.label }}</option>
+      </select>
+
+      <div v-if="busy" class="progress-wrap">
+        <div class="progress-bar" :style="{ width: progressPct + '%' }" />
       </div>
+      <p v-if="statusText" class="status-text" :class="{ 'is-error': isError }">{{ statusText }}</p>
+
+      <div class="action-row">
+        <button v-if="!downloadUrl" class="btn-clean" :disabled="busy" @click="runClean">
+          {{ busy ? '清洗中…' : '开始深度清洗' }}
+        </button>
+        <a
+          v-if="downloadUrl"
+          class="btn-download"
+          :href="downloadUrl"
+          :download="downloadName"
+        >⬇ 下载净化文件（{{ fmtSize(resultSize) }}）</a>
+        <button v-if="downloadUrl || isError" class="btn-again" @click="resetCleaner">继续清洗下一个</button>
+      </div>
+      <p class="trust-line">处理全程在本机浏览器内存中完成，文件不会离开你的设备；流拷贝不重编，通常数秒完成。</p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { FFmpeg } from '@ffmpeg/ffmpeg'
+import { toBlobURL, fetchFile } from '@ffmpeg/util'
+import {
+  PRESETS, MAX_FILE, WARN_FILE,
+  parseProbeLog, buildCleanArgs, patchEncoder, stripGoogleSignature, outputName,
+} from '../utils/deepClean.js'
+
+const CORE_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm'
 
 const fileInput   = ref(null)
 const isDragging  = ref(false)
-const processing  = ref(false)
-const resultMsg   = ref('')
+const selectedFile = ref(null)
+const presetKey   = ref('davinci')
+const busy        = ref(false)
+const statusText  = ref('')
+const isError     = ref(false)
+const progressPct = ref(0)
+const downloadUrl = ref('')
+const downloadName = ref('')
+const resultSize  = ref(0)
+
+let ffmpeg = null
+let engineLoaded = false
+let probeLog = ''
+
+const preset = computed(() => PRESETS[presetKey.value])
+
+function fmtSize(b) {
+  return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.round(b / 1024) + ' KB'
+}
+
+function setStatus(t, err = false) {
+  statusText.value = t
+  isError.value = err
+}
 
 function triggerFileInput() {
-  if (fileInput.value) {
-    fileInput.value.click()
-  }
+  if (busy.value) return
+  fileInput.value?.click()
 }
 
 function handleFileSelect(e) {
-  const file = e.target.files?.[0]
-  if (file) cleanFile(file)
+  const f = e.target.files?.[0]
+  if (f) pick(f)
 }
 
 function handleDrop(e) {
   isDragging.value = false
-  const file = e.dataTransfer.files?.[0]
-  if (file) cleanFile(file)
+  if (busy.value) return
+  const f = e.dataTransfer.files?.[0]
+  if (f) pick(f)
+}
+
+function pick(f) {
+  clearResult()
+  if (f.size > MAX_FILE) {
+    selectedFile.value = null
+    setStatus(`文件过大（${fmtSize(f.size)}），最大支持 500 MB。`, true)
+    return
+  }
+  selectedFile.value = f
+  setStatus(
+    f.size > WARN_FILE
+      ? '已选择大文件：手机内存有限时可能较慢，请耐心等待。'
+      : ''
+  )
+}
+
+function clearResult() {
+  if (downloadUrl.value) URL.revokeObjectURL(downloadUrl.value)
+  downloadUrl.value = ''
+  downloadName.value = ''
+  resultSize.value = 0
+  progressPct.value = 0
 }
 
 function resetCleaner() {
-  resultMsg.value = ''
+  selectedFile.value = null
+  clearResult()
+  setStatus('')
   if (fileInput.value) fileInput.value.value = ''
 }
 
-async function cleanFile(file) {
-  processing.value = true
-  resultMsg.value  = ''
+async function ensureEngine() {
+  if (engineLoaded) return
+  if (!ffmpeg) {
+    ffmpeg = new FFmpeg()
+    ffmpeg.on('log', ({ message }) => { probeLog += message + '\n' })
+    ffmpeg.on('progress', ({ progress }) => {
+      const pct = Math.max(0, Math.min(100, Math.round((progress || 0) * 100)))
+      // 清洗阶段进度映射到 30%~85% 区间
+      progressPct.value = Math.max(progressPct.value, 30 + Math.round(pct * 0.55))
+    })
+  }
+  setStatus('正在加载视频引擎（约 30MB，仅首次）…')
+  await ffmpeg.load({
+    coreURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
+    wasmURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm'),
+  })
+  engineLoaded = true
+}
+
+async function runClean() {
+  const file = selectedFile.value
+  if (!file || busy.value) return
+  busy.value = true
+  clearResult()
+  progressPct.value = 5
+
+  const inName = 'in_' + file.name.replace(/[^a-zA-Z0-9.]/g, '_')
+  const { outFile, download } = outputName(file.name, preset.value)
 
   try {
-    const arrayBuffer = await file.arrayBuffer()
-    const uint8 = new Uint8Array(arrayBuffer)
+    await ensureEngine()
 
-    // 目标特征签名 1: Google Inc. 生成的媒体标识
-    const targetGoogle = new TextEncoder().encode('ISO Media file produced by Google Inc.')
-    const replaceGeneric = new TextEncoder().encode('VideoHandler\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0')
+    await ffmpeg.writeFile(inName, await fetchFile(file))
 
-    let replacedCount = 0
+    // 1) 探测流构成：无音轨不强写音频流参数
+    setStatus('正在探测媒体流…')
+    progressPct.value = 20
+    probeLog = ''
+    await ffmpeg.exec(['-i', inName]).catch(() => 1)
+    const streams = parseProbeLog(probeLog)
 
-    // 内存快速匹配替换
-    for (let i = 0; i <= uint8.length - targetGoogle.length; i++) {
-      let match = true
-      for (let j = 0; j < targetGoogle.length; j++) {
-        if (uint8[i + j] !== targetGoogle[j]) {
-          match = false
-          break
-        }
-      }
-      if (match) {
-        uint8.set(replaceGeneric, i)
-        replacedCount++
-        i += targetGoogle.length - 1
-      }
-    }
+    // 2) 流拷贝重封装 + 清元数据/章节 + 剥 SEI
+    setStatus('正在深度清洗（重封装 + 剥除平台标记）…')
+    progressPct.value = 30
+    const args = buildCleanArgs({
+      inName, outName: outFile, preset: preset.value,
+      hasVideo: streams.hasVideo, hasAudio: streams.hasAudio,
+    })
+    const code = await ffmpeg.exec(args)
+    if (code !== 0) throw new Error('FFmpeg 处理失败（退出码 ' + code + '），文件可能不受支持')
 
-    // 重新封装为纯净 Blob 并触发下载
-    const cleanBlob = new Blob([uint8], { type: file.type || 'video/mp4' })
-    const originalName = file.name
-    const lastDot = originalName.lastIndexOf('.')
-    const cleanName = lastDot !== -1
-      ? `${originalName.slice(0, lastDot)}_clean${originalName.slice(lastDot)}`
-      : `${originalName}_clean.mp4`
+    // 3) 等长补丁重写编码器标识 + Google 签名安全网
+    setStatus('正在重写编码器标识…')
+    progressPct.value = 90
+    let data = await ffmpeg.readFile(outFile)
+    if (typeof data === 'string') throw new Error('读取处理结果失败')
+    data = patchEncoder(data, preset.value.tool)
+    stripGoogleSignature(data)
 
-    const downloadUrl = URL.createObjectURL(cleanBlob)
-    const a = document.createElement('a')
-    a.href = downloadUrl
-    a.download = cleanName
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(downloadUrl)
-
-    resultMsg.value = replacedCount > 0
-      ? `已成功抹除 ${replacedCount} 处 Google/YouTube 特征抬头！纯净版已自动下载保存。`
-      : `未检测到已知海外签名，已重置元数据校验并保存为安全文件！`
-
+    const blob = new Blob([data.buffer], { type: 'video/mp4' })
+    downloadUrl.value = URL.createObjectURL(blob)
+    downloadName.value = download
+    resultSize.value = blob.size
+    progressPct.value = 100
+    setStatus(`✅ 清洗完成！已伪装为 ${preset.value.label} 导出文件，元数据与平台标记已清净。`)
   } catch (err) {
-    resultMsg.value = `清洗出错: ${err.message}`
+    console.error(err)
+    setStatus('清洗出错: ' + (err?.message || err), true)
   } finally {
-    processing.value = false
+    if (ffmpeg && engineLoaded) {
+      await ffmpeg.deleteFile(inName).catch(() => {})
+      await ffmpeg.deleteFile(outFile).catch(() => {})
+    }
+    busy.value = false
   }
 }
 </script>
@@ -182,12 +279,8 @@ h3 {
   margin: 0;
 }
 
-.desc code {
-  background: #f1f5f9;
-  color: #dc2626;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 12px;
+.desc b {
+  color: #334155;
 }
 
 .drop-zone {
@@ -203,6 +296,10 @@ h3 {
 .drop-zone:hover, .drop-zone.is-dragging {
   border-color: #2563eb;
   background: #eff6ff;
+}
+
+.drop-zone.is-processing {
+  cursor: default;
 }
 
 .hidden-input {
@@ -228,51 +325,113 @@ h3 {
   margin: 0;
 }
 
-.spinner-blue {
-  width: 24px;
-  height: 24px;
-  border: 3px solid #dbeafe;
-  border-top-color: #2563eb;
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-  margin: 0 auto 10px;
+.file-content {
+  cursor: default;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.processing-text {
+.file-name {
   font-size: 14px;
   font-weight: 600;
-  color: #2563eb;
-  margin: 0;
+  color: #1e293b;
+  margin: 0 0 4px;
+  word-break: break-all;
 }
 
-.success-icon {
-  font-size: 28px;
+.controls {
+  margin-top: 16px;
+  text-align: left;
+}
+
+.preset-label {
   display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
   margin-bottom: 6px;
 }
 
-.success-text {
+.preset-select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
   font-size: 14px;
-  font-weight: 600;
-  color: #047857;
-  margin: 0 0 12px;
+  background: #fff;
+  color: #0f172a;
 }
 
-.btn-again {
-  padding: 6px 16px;
-  background: #0f172a;
-  color: #ffffff;
+.progress-wrap {
+  margin-top: 14px;
+  background: #eef2ff;
+  border-radius: 8px;
+  overflow: hidden;
+  height: 10px;
+}
+
+.progress-bar {
+  height: 100%;
+  background: #2563eb;
+  transition: width 0.2s;
+}
+
+.status-text {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #475569;
+  min-height: 18px;
+}
+
+.status-text.is-error {
+  color: #dc2626;
+}
+
+.action-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.btn-clean {
+  background: #2563eb;
+  color: #fff;
   border: none;
-  border-radius: 6px;
-  font-size: 12px;
+  border-radius: 8px;
+  padding: 11px 26px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
 }
-.btn-again:hover {
-  background: #1e293b;
+.btn-clean:hover { background: #1d4ed8; }
+.btn-clean:disabled { opacity: 0.45; cursor: default; }
+
+.btn-download {
+  display: inline-block;
+  background: #059669;
+  color: #fff;
+  border-radius: 8px;
+  padding: 11px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.btn-download:hover { background: #047857; }
+
+.btn-again {
+  padding: 11px 18px;
+  background: #0f172a;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-again:hover { background: #1e293b; }
+
+.trust-line {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 12px 0 0;
 }
 </style>
