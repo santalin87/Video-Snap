@@ -21,7 +21,7 @@
               <span class="plugin-name">核心解析引擎 (yt-dlp)</span>
               <span class="version-tag">{{ ytdlpVersion || 'v2026.08.19 (可用)' }}</span>
             </div>
-            <p class="plugin-desc">负责实时提取 YouTube、Twitter (X)、抖音、TikTok 的音视频流与反爬签名。</p>
+            <p class="plugin-desc">负责实时提取各平台的音视频流与反爬签名（底层 yt-dlp 支持上千站点，微博、B站等均可解析，不限于首页列出的几个）。</p>
           </div>
           <div class="plugin-action">
             <button

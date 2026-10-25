@@ -5,7 +5,7 @@
         v-model="inputUrl"
         type="url"
         class="url-field"
-        placeholder="粘贴视频链接 — YouTube / Twitter (X) / 抖音 / TikTok"
+        placeholder="粘贴视频链接 — 微博 / B站 / YouTube / X / 抖音 / TikTok 等均可"
         :disabled="loading"
         @keydown.enter="handleSubmit"
         @paste="handlePaste"
@@ -48,6 +48,9 @@ const platforms = [
   { icon: '𝕏', name: 'Twitter / X' },
   { icon: '🎵', name: '抖音 (无水印)' },
   { icon: '♪', name: 'TikTok' },
+  { icon: '🎬', name: '微博' },
+  { icon: '📺', name: 'B站' },
+  { icon: '＋', name: 'yt-dlp 支持的更多平台' },
 ]
 
 function handleSubmit() {

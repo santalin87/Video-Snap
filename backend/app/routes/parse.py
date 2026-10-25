@@ -2,12 +2,16 @@
 /api/parse 路由
 
 接收 URL → 识别平台 → 分发到对应解析服务 → 返回格式列表
+
+不设平台白名单：已知平台走专属解析，未识别的平台走通用 yt-dlp 解析
+（见 services/generic.py）。不要再以“不支持的平台”拒绝链接——
+yt-dlp 自带上千个提取器，解析不了时它自己会报错，届时按 422 返回原因。
 """
 import yt_dlp
 from fastapi import APIRouter, HTTPException
 
 from ..models import ErrorResponse, ParseRequest, ParseResponse
-from ..services import douyin, twitter, youtube
+from ..services import douyin, generic, twitter, youtube
 from ..services.detector import Platform, detect_platform
 
 router = APIRouter()
@@ -17,7 +21,7 @@ router = APIRouter()
     "/parse",
     response_model=ParseResponse,
     responses={
-        400: {"model": ErrorResponse, "description": "URL 无效或平台不支持"},
+        400: {"model": ErrorResponse, "description": "URL 无效"},
         422: {"model": ErrorResponse, "description": "解析失败"},
     },
     summary="解析视频 URL",
@@ -31,12 +35,6 @@ async def parse_url(body: ParseRequest):
 
     platform = detect_platform(url)
 
-    if platform == Platform.UNKNOWN:
-        raise HTTPException(
-            status_code=400,
-            detail="不支持的平台，目前支持：YouTube、Twitter/X、抖音、TikTok",
-        )
-
     try:
         if platform == Platform.YOUTUBE:
             result = youtube.parse(url)
@@ -47,7 +45,8 @@ async def parse_url(body: ParseRequest):
         elif platform == Platform.TIKTOK:
             result = douyin.parse(url, platform="tiktok")
         else:
-            raise HTTPException(status_code=400, detail="未知平台")
+            # 未识别的平台：不拒绝，交给通用 yt-dlp 解析
+            result = generic.parse(url)
 
     except yt_dlp.utils.DownloadError as e:
         # yt-dlp 的错误通常包含详细原因

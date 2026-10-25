@@ -49,6 +49,9 @@ const platformMap = {
   twitter: { label: 'Twitter / X', icon: '𝕏' },
   douyin:  { label: '抖音', icon: '🎵' },
   tiktok:  { label: 'TikTok', icon: '♪' },
+  weibo:   { label: '微博', icon: '🎬' },
+  bilibili:{ label: 'B站', icon: '📺' },
+  // 未列出的平台：platformLabel / platformIcon 会直接显示后端返回的平台名
 }
 
 const platformLabel = computed(() => platformMap[props.info.platform]?.label ?? props.info.platform)
