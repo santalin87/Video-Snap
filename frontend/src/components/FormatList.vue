@@ -51,6 +51,41 @@
       </div>
     </div>
 
+    <!-- 一键下载净化版：取片 → 本机清洗 → 直接存净化版，不用先存原片、不用切到净化页 -->
+    <div v-if="formats.video?.length" class="download-row clean-row">
+      <div class="row-header">
+        <div class="badge badge-clean">
+          <span class="icon">🧽</span>
+          <span class="title">下载净化版（一键）</span>
+        </div>
+        <span class="hint-tag">取片 + 清平台标记，一步到位</span>
+      </div>
+
+      <div class="clean-controls">
+        <select v-model="cleanPreset" class="clean-select" :disabled="cleanBusy">
+          <option v-for="(p, k) in PRESETS" :key="k" :value="k">{{ p.label }}</option>
+        </select>
+        <button
+          type="button"
+          class="btn btn-clean"
+          :disabled="cleanBusy || !selectedVideoUrl"
+          @click="cleanDownload"
+        >
+          {{ cleanBusy ? '处理中…' : '⬇ 下载并净化' }}
+        </button>
+      </div>
+
+      <div v-if="cleanBusy" class="clean-progress-wrap">
+        <div class="clean-progress-bar" :style="{ width: cleanPct + '%' }" />
+      </div>
+      <p v-if="cleanStatus" class="clean-status" :class="{ 'is-error': cleanIsError }">{{ cleanStatus }}</p>
+
+      <div class="tip-bar">
+        💡 一键流程：经代理取片 → 在本机浏览器清洗（流拷贝、不重编、不上传）→ 直接保存净化版。
+        超过 200MB 的片子在手机上可能较慢或内存不足，失败时请改用上方「下载视频」存原片，再到净化页清洗。
+      </div>
+    </div>
+
     <!-- 音频下载卡片 -->
     <div v-if="formats.audio?.length" class="download-row">
       <div class="row-header">
@@ -155,6 +190,8 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { getDownloadUrl } from '../api/index.js'
+import { PRESETS, MAX_FILE } from '../utils/deepClean.js'
+import { cleanVideoFile, triggerBlobDownload } from '../utils/cleanVideo.js'
 
 const props = defineProps({
   formats: {
@@ -172,6 +209,13 @@ const selectedVideoUrl = ref('')
 const selectedAudioUrl = ref('')
 const selectedSubUrl   = ref('')
 const copiedType       = ref('')
+
+// 一键下载净化版的状态
+const cleanPreset  = ref('davinci')
+const cleanBusy    = ref(false)
+const cleanPct     = ref(0)
+const cleanStatus  = ref('')
+const cleanIsError = ref(false)
 
 watch(
   () => props.formats,
@@ -235,6 +279,43 @@ function copyUrl(url, type) {
     }, 2000)
   })
 }
+
+function fmtSize(b) {
+  return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.round(b / 1024) + ' KB'
+}
+
+// 一键流程：经代理取片 → 本机清洗（与净化页同一份逻辑）→ 直接保存净化版
+async function cleanDownload() {
+  if (!selectedVideoUrl.value || cleanBusy.value) return
+  cleanBusy.value = true
+  cleanPct.value = 0
+  cleanIsError.value = false
+  try {
+    cleanStatus.value = '正在取片（经下载代理）…'
+    const resp = await fetch(videoDownloadUrl.value)
+    if (!resp.ok) throw new Error('取片失败（HTTP ' + resp.status + '）')
+    const blob = await resp.blob()
+    if (!blob.size) throw new Error('取到的文件为空')
+    if (blob.size > MAX_FILE) {
+      throw new Error('文件过大（' + fmtSize(blob.size) + '），超过 500MB 上限')
+    }
+    const file = new File([blob], suggestFilename(currentVideo.value, 'video'), { type: 'video/mp4' })
+    const res = await cleanVideoFile({
+      file,
+      presetKey: cleanPreset.value,
+      onStatus: (t) => { cleanStatus.value = t },
+      onProgress: (p) => { cleanPct.value = p },
+    })
+    triggerBlobDownload(res.blob, res.filename)
+    cleanStatus.value = `✅ 净化版已保存：${res.filename}（${fmtSize(res.size)}，伪装为 ${res.presetLabel}）`
+  } catch (err) {
+    console.error(err)
+    cleanIsError.value = true
+    cleanStatus.value = '处理出错：' + (err?.message || err) + '；可改用上方「下载视频」存原片，再到净化页清洗。'
+  } finally {
+    cleanBusy.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -290,6 +371,72 @@ function copyUrl(url, type) {
   background: #f8fafc;
   color: #334155;
   border: 1px solid #e2e8f0;
+}
+
+.badge-clean {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.clean-controls {
+  display: flex;
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .clean-controls {
+    flex-direction: column;
+  }
+}
+
+.clean-select {
+  flex: 1;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.btn-clean {
+  background: #059669;
+  color: #ffffff;
+  border: 1px solid #047857;
+}
+.btn-clean:hover:not(:disabled) {
+  background: #047857;
+}
+.btn-clean:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.clean-progress-wrap {
+  margin-top: 12px;
+  background: #eef2ff;
+  border-radius: 8px;
+  overflow: hidden;
+  height: 10px;
+}
+
+.clean-progress-bar {
+  height: 100%;
+  background: #2563eb;
+  transition: width 0.2s;
+}
+
+.clean-status {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.clean-status.is-error {
+  color: #dc2626;
 }
 
 .hint-tag {

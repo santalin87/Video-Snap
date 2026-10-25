@@ -73,14 +73,8 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { FFmpeg } from '@ffmpeg/ffmpeg'
-import { toBlobURL, fetchFile } from '@ffmpeg/util'
-import {
-  PRESETS, MAX_FILE, WARN_FILE,
-  parseProbeLog, buildCleanArgs, patchEncoder, stripGoogleSignature, outputName,
-} from '../utils/deepClean.js'
-
-const CORE_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm'
+import { PRESETS, MAX_FILE, WARN_FILE } from '../utils/deepClean.js'
+import { cleanVideoFile } from '../utils/cleanVideo.js'
 
 const fileInput   = ref(null)
 const isDragging  = ref(false)
@@ -93,10 +87,6 @@ const progressPct = ref(0)
 const downloadUrl = ref('')
 const downloadName = ref('')
 const resultSize  = ref(0)
-
-let ffmpeg = null
-let engineLoaded = false
-let probeLog = ''
 
 const preset = computed(() => PRESETS[presetKey.value])
 
@@ -156,79 +146,28 @@ function resetCleaner() {
   if (fileInput.value) fileInput.value.value = ''
 }
 
-async function ensureEngine() {
-  if (engineLoaded) return
-  if (!ffmpeg) {
-    ffmpeg = new FFmpeg()
-    ffmpeg.on('log', ({ message }) => { probeLog += message + '\n' })
-    ffmpeg.on('progress', ({ progress }) => {
-      const pct = Math.max(0, Math.min(100, Math.round((progress || 0) * 100)))
-      // 清洗阶段进度映射到 30%~85% 区间
-      progressPct.value = Math.max(progressPct.value, 30 + Math.round(pct * 0.55))
-    })
-  }
-  setStatus('正在加载视频引擎（约 30MB，仅首次）…')
-  await ffmpeg.load({
-    coreURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm'),
-  })
-  engineLoaded = true
-}
-
 async function runClean() {
   const file = selectedFile.value
   if (!file || busy.value) return
   busy.value = true
   clearResult()
-  progressPct.value = 5
-
-  const inName = 'in_' + file.name.replace(/[^a-zA-Z0-9.]/g, '_')
-  const { outFile, download } = outputName(file.name, preset.value)
 
   try {
-    await ensureEngine()
-
-    await ffmpeg.writeFile(inName, await fetchFile(file))
-
-    // 1) 探测流构成：无音轨不强写音频流参数
-    setStatus('正在探测媒体流…')
-    progressPct.value = 20
-    probeLog = ''
-    await ffmpeg.exec(['-i', inName]).catch(() => 1)
-    const streams = parseProbeLog(probeLog)
-
-    // 2) 流拷贝重封装 + 清元数据/章节 + 剥 SEI
-    setStatus('正在深度清洗（重封装 + 剥除平台标记）…')
-    progressPct.value = 30
-    const args = buildCleanArgs({
-      inName, outName: outFile, preset: preset.value,
-      hasVideo: streams.hasVideo, hasAudio: streams.hasAudio,
+    // 清洗编排在 utils/cleanVideo.js，与下载页的一键流程共用同一份逻辑
+    const res = await cleanVideoFile({
+      file,
+      presetKey: presetKey.value,
+      onStatus: (t) => setStatus(t),
+      onProgress: (p) => { progressPct.value = p },
     })
-    const code = await ffmpeg.exec(args)
-    if (code !== 0) throw new Error('FFmpeg 处理失败（退出码 ' + code + '），文件可能不受支持')
-
-    // 3) 等长补丁重写编码器标识 + Google 签名安全网
-    setStatus('正在重写编码器标识…')
-    progressPct.value = 90
-    let data = await ffmpeg.readFile(outFile)
-    if (typeof data === 'string') throw new Error('读取处理结果失败')
-    data = patchEncoder(data, preset.value.tool)
-    stripGoogleSignature(data)
-
-    const blob = new Blob([data.buffer], { type: 'video/mp4' })
-    downloadUrl.value = URL.createObjectURL(blob)
-    downloadName.value = download
-    resultSize.value = blob.size
-    progressPct.value = 100
-    setStatus(`✅ 清洗完成！已伪装为 ${preset.value.label} 导出文件，元数据与平台标记已清净。`)
+    downloadUrl.value = URL.createObjectURL(res.blob)
+    downloadName.value = res.filename
+    resultSize.value = res.size
+    setStatus(`✅ 清洗完成！已伪装为 ${res.presetLabel} 导出文件，元数据与平台标记已清净。`)
   } catch (err) {
     console.error(err)
     setStatus('清洗出错: ' + (err?.message || err), true)
   } finally {
-    if (ffmpeg && engineLoaded) {
-      await ffmpeg.deleteFile(inName).catch(() => {})
-      await ffmpeg.deleteFile(outFile).catch(() => {})
-    }
     busy.value = false
   }
 }

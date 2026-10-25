@@ -1,7 +1,17 @@
 <template>
   <div class="url-input-wrapper">
     <div class="input-group" :class="{ 'has-error': error }">
+      <button
+        type="button"
+        class="paste-btn"
+        :disabled="loading"
+        title="清空输入框并粘贴剪贴板里的链接"
+        @click="handlePasteClick"
+      >
+        📋 粘贴
+      </button>
       <input
+        ref="urlField"
         v-model="inputUrl"
         type="url"
         class="url-field"
@@ -21,6 +31,7 @@
     </div>
 
     <p v-if="error" class="error-msg">{{ error }}</p>
+    <p v-if="pasteHint" class="paste-hint">{{ pasteHint }}</p>
 
     <!-- 平台标签 -->
     <div class="platform-hints">
@@ -42,6 +53,8 @@ const props = defineProps({
 const emit = defineEmits(['submit'])
 
 const inputUrl = ref('')
+const urlField = ref(null)
+const pasteHint = ref('')
 
 const platforms = [
   { icon: '▶', name: 'YouTube' },
@@ -63,6 +76,28 @@ function handlePaste() {
     const url = inputUrl.value.trim()
     if (url) emit('submit', url)
   }, 100)
+}
+
+// 一键粘贴：先读剪贴板，读到了才清空旧链接并填入（读不到时保留旧链接，
+// 只提示手动粘贴，避免点一下把原来的链接弄丢）；填入后与手动粘贴一致，自动开始解析。
+async function handlePasteClick() {
+  pasteHint.value = ''
+  try {
+    if (!navigator.clipboard?.readText) throw new Error('clipboard unsupported')
+    const text = (await navigator.clipboard.readText()).trim()
+    if (!text) {
+      pasteHint.value = '剪贴板是空的，没有可粘贴的链接'
+      return
+    }
+    inputUrl.value = text
+    setTimeout(() => {
+      const url = inputUrl.value.trim()
+      if (url) emit('submit', url)
+    }, 100)
+  } catch {
+    pasteHint.value = '浏览器不允许直接读取剪贴板，请长按输入框手动粘贴'
+    urlField.value?.focus()
+  }
 }
 
 defineExpose({ clear: () => { inputUrl.value = '' } })
@@ -110,6 +145,36 @@ defineExpose({ clear: () => { inputUrl.value = '' } })
 .url-field:disabled {
   background: #f8fafc;
   cursor: not-allowed;
+}
+
+.paste-btn {
+  padding: 0 12px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-right: 1px solid #e2e8f0;
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.paste-btn:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.paste-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.paste-hint {
+  margin: 8px 0 0 4px;
+  color: #b45309;
+  font-size: 12px;
 }
 
 .parse-btn {
