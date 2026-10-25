@@ -7,14 +7,37 @@
 （见 services/generic.py）。不要再以“不支持的平台”拒绝链接——
 yt-dlp 自带上千个提取器，解析不了时它自己会报错，届时按 422 返回原因。
 """
+import re
+
 import yt_dlp
 from fastapi import APIRouter, HTTPException
 
 from ..models import ErrorResponse, ParseRequest, ParseResponse
-from ..services import douyin, generic, twitter, youtube
+from ..services import douyin, generic, twitter, xiaohongshu, youtube
 from ..services.detector import Platform, detect_platform
 
 router = APIRouter()
+
+
+def _extract_url(text: str):
+    """从带宣传语的分享文本里只取出链接（与前端 UrlInput 的 extractUrl 对齐，
+    后端再兜一层：旧前端、直接调接口时带上整段分享文本也能解析）。
+    找不到链接时返回原文，不静默丢掉用户输入。"""
+    m = re.search(
+        r"https?://[^\s<>\"'【】（）()\[\]{}\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef]+", text)
+    if m:
+        url = re.sub(r"[.,;:!?。，、；：！？》>】」』]+$", "", m.group(0))
+        while url.endswith(")") and url.count("(") < url.count(")"):
+            url = url[:-1]
+        return url
+    m2 = re.search(
+        r"(?:www\.|[a-z0-9-]+\.)+(?:com|cn|net|io|me|tv|cc|top|xyz)"
+        r"(?:/[^\s<>\"'【】（）()\[\]{}\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef]*)?",
+        text, re.IGNORECASE,
+    )
+    if m2:
+        return "https://" + re.sub(r"[.,;:!?。，、；：！？》>】」』]+$", "", m2.group(0))
+    return text
 
 
 @router.post(
@@ -28,7 +51,7 @@ router = APIRouter()
     description="输入视频链接，返回可用的视频/音频/字幕直链列表，不经过服务器下载。",
 )
 async def parse_url(body: ParseRequest):
-    url = body.url.strip()
+    url = _extract_url(body.url.strip())
 
     if not url:
         raise HTTPException(status_code=400, detail="URL 不能为空")
@@ -44,6 +67,8 @@ async def parse_url(body: ParseRequest):
             result = douyin.parse(url, platform="douyin")
         elif platform == Platform.TIKTOK:
             result = douyin.parse(url, platform="tiktok")
+        elif platform == Platform.XIAOHONGSHU:
+            result = xiaohongshu.parse(url)
         else:
             # 未识别的平台：不拒绝，交给通用 yt-dlp 解析
             result = generic.parse(url)

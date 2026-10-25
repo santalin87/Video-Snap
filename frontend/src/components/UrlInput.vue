@@ -15,7 +15,7 @@
         v-model="inputUrl"
         type="url"
         class="url-field"
-        placeholder="粘贴视频链接 — 微博 / B站 / YouTube / X / 抖音 / TikTok 等均可"
+        placeholder="粘贴视频链接，带宣传语也没关系，会自动只取链接"
         :disabled="loading"
         @keydown.enter="handleSubmit"
         @paste="handlePaste"
@@ -62,24 +62,57 @@ const platforms = [
   { icon: '🎵', name: '抖音 (无水印)' },
   { icon: '♪', name: 'TikTok' },
   { icon: '🎬', name: '微博' },
+  { icon: '📕', name: '小红书' },
   { icon: '📺', name: 'B站' },
   { icon: '＋', name: 'yt-dlp 支持的更多平台' },
 ]
 
+// 从一段带宣传语/话题/表情的分享文本里只取出链接。
+// 例：“宋雨琦：我真求求你们了 https://xhslink.cn/o/A1sqJElUVUz 这段文字复制好，打开【小红书】…”
+// → https://xhslink.cn/o/A1sqJElUVUz
+// 规则：先找 http(s) 链接（中文、空格、括号、引号处截断）；没有带协议的，再找裸域名并补 https://。
+// 找不到时返回 null，调用方保留原文本走老路（后端会再给一次明确报错），不静默丢掉用户输入。
+function cleanUrlTail(u) {
+  let url = u.replace(/[.,;:!?。，、；：！？》>】」』]+$/, '')
+  // 末尾多余的右括号（如“（链接）”包住时）只去掉多出来的那几个
+  while (url.endsWith(')') && (url.match(/\(/g) || []).length < (url.match(/\)/g) || []).length) {
+    url = url.slice(0, -1)
+  }
+  return url
+}
+
+function extractUrl(text) {
+  const t = String(text || '')
+  // 链接字符集排除：空白、引号、括号、中文字符（\u4e00-\u9fa5）、
+  // 中日韩标点（\u3000-\u303f）、全角字符（\uFF00-\uFFEF，含，。、！等），
+  // 这样“链接，记得点赞”“链接。这段文字”都能在链接处干净截断。
+  const m = t.match(/https?:\/\/[^\s<>"'【】（）()\[\]{}\u4e00-\u9fa5\u3000-\u303F\uFF00-\uFFEF]+/)
+  if (m) return cleanUrlTail(m[0])
+  const m2 = t.match(/(?:www\.|[a-z0-9-]+\.)+(?:com|cn|net|io|me|tv|cc|top|xyz)(?:\/[^\s<>"'【】（）()\[\]{}\u4e00-\u9fa5\u3000-\u303F\uFF00-\uFFEF]*)?/i)
+  if (m2) return cleanUrlTail('https://' + m2[0])
+  return null
+}
+
+function submitCleaned() {
+  const raw = inputUrl.value.trim()
+  if (!raw) return
+  const url = extractUrl(raw)
+  if (url) inputUrl.value = url
+  emit('submit', url || raw)
+}
+
 function handleSubmit() {
-  const url = inputUrl.value.trim()
-  if (url) emit('submit', url)
+  submitCleaned()
 }
 
 function handlePaste() {
   setTimeout(() => {
-    const url = inputUrl.value.trim()
-    if (url) emit('submit', url)
+    submitCleaned()
   }, 100)
 }
 
-// 一键粘贴：先读剪贴板，读到了才清空旧链接并填入（读不到时保留旧链接，
-// 只提示手动粘贴，避免点一下把原来的链接弄丢）；填入后与手动粘贴一致，自动开始解析。
+// 一键粘贴：先读剪贴板，从中只提取链接再填入（宣传语、话题等一并去掉）。
+// 剪贴板里找不到链接时不清空旧输入、不提交，只提示；读不到剪贴板时保留旧链接并提示手动粘贴。
 async function handlePasteClick() {
   pasteHint.value = ''
   try {
@@ -89,10 +122,15 @@ async function handlePasteClick() {
       pasteHint.value = '剪贴板是空的，没有可粘贴的链接'
       return
     }
-    inputUrl.value = text
+    const url = extractUrl(text)
+    if (!url) {
+      pasteHint.value = '剪贴板里没找到链接，请检查复制的内容'
+      return
+    }
+    inputUrl.value = url
     setTimeout(() => {
-      const url = inputUrl.value.trim()
-      if (url) emit('submit', url)
+      const u = inputUrl.value.trim()
+      if (u) emit('submit', u)
     }, 100)
   } catch {
     pasteHint.value = '浏览器不允许直接读取剪贴板，请长按输入框手动粘贴'

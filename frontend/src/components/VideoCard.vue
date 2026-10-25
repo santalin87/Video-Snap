@@ -50,6 +50,7 @@ const platformMap = {
   douyin:  { label: '抖音', icon: '🎵' },
   tiktok:  { label: 'TikTok', icon: '♪' },
   weibo:   { label: '微博', icon: '🎬' },
+  xiaohongshu: { label: '小红书', icon: '📕' },
   bilibili:{ label: 'B站', icon: '📺' },
   // 未列出的平台：platformLabel / platformIcon 会直接显示后端返回的平台名
 }

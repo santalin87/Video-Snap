@@ -7,6 +7,7 @@ class Platform(str, Enum):
     TWITTER = "twitter"
     DOUYIN = "douyin"
     TIKTOK = "tiktok"
+    XIAOHONGSHU = "xiaohongshu"
     UNKNOWN = "unknown"
 
 
@@ -30,6 +31,11 @@ _PATTERNS = {
     Platform.TIKTOK: [
         r"tiktok\.com/",
         r"vm\.tiktok\.com/",
+    ],
+    Platform.XIAOHONGSHU: [
+        r"xiaohongshu\.com/",
+        r"xhslink\.com/",
+        r"xhslink\.cn/",
     ],
 }
 
