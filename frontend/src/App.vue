@@ -14,19 +14,12 @@
           <span class="logo-text">VidSnap</span>
         </div>
 
-        <button class="btn-engine-setting" @click="showEngineModal = true">
-          <span class="setting-icon">⚙️</span>
-          <span>组件与引擎管理</span>
-        </button>
+        <!-- 2026-10-26 用户定：隐藏“组件与引擎管理”入口（EngineModal.vue 文件保留在仓库里，
+             以后要恢复时把下面注释的三处改回来即可）。原因：网页版下弹窗里的“yt-dlp 一键升级”
+             只是模拟成功提示，并不真的更新引擎，放在公开站上会误导访客。 -->
       </div>
       <p class="logo-subtitle">自托管多平台音视频高速解析 · 模块化插件 · 零中转直连</p>
     </header>
-
-    <!-- 插件与引擎管理弹窗 -->
-    <EngineModal
-      :visible="showEngineModal"
-      @close="showEngineModal = false"
-    />
 
     <!-- 主体区域 -->
     <main class="main">
@@ -109,7 +102,6 @@
 <script setup>
 import { ref } from 'vue'
 import { parseUrl } from './api/index.js'
-import EngineModal from './components/EngineModal.vue'
 import FormatList from './components/FormatList.vue'
 import UrlInput from './components/UrlInput.vue'
 import VideoCard from './components/VideoCard.vue'
@@ -119,7 +111,6 @@ const urlInputRef = ref(null)
 const loading     = ref(false)
 const parseError  = ref('')
 const result      = ref(null)
-const showEngineModal = ref(false)
 const activeTab   = ref('download')
 
 async function handleParse(url) {
@@ -183,30 +174,7 @@ body {
   gap: 10px;
 }
 
-.btn-engine-setting {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #334155;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
 
-.btn-engine-setting:hover {
-  background: #f1f5f9;
-  border-color: #94a3b8;
-  color: #0f172a;
-}
-
-.setting-icon {
-  font-size: 14px;
-}
 
 .logo-icon {
   background: #2563eb;
