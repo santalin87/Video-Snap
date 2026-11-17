@@ -43,6 +43,16 @@
           >
             {{ copiedType === 'video' ? '✓ 已复制' : '复制直链' }}
           </button>
+
+          <!-- 取片去截取：经代理取片后直接递进截取页，不用先存文件、不用重新选文件 -->
+          <button
+            type="button"
+            class="btn-secondary"
+            :disabled="cutBusy || !selectedVideoUrl"
+            @click="cutDownload"
+          >
+            {{ cutBusy ? '取片中…' : '✂️ 取片去截取' }}
+          </button>
         </div>
       </div>
 
@@ -204,6 +214,8 @@ const props = defineProps({
   },
 })
 
+const emit = defineEmits(['to-cutter'])
+
 // 默认选中项
 const selectedVideoUrl = ref('')
 const selectedAudioUrl = ref('')
@@ -216,6 +228,9 @@ const cleanBusy    = ref(false)
 const cleanPct     = ref(0)
 const cleanStatus  = ref('')
 const cleanIsError = ref(false)
+
+// 取片去截取的状态
+const cutBusy = ref(false)
 
 watch(
   () => props.formats,
@@ -282,6 +297,29 @@ function copyUrl(url, type) {
 
 function fmtSize(b) {
   return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.round(b / 1024) + ' KB'
+}
+
+// 取片去截取：经代理取片 → 直接递进截取页（App 切到截取标签并把文件递过去）
+async function cutDownload() {
+  if (!selectedVideoUrl.value || cutBusy.value) return
+  cutBusy.value = true
+  try {
+    const resp = await fetch(videoDownloadUrl.value)
+    if (!resp.ok) throw new Error('取片失败（HTTP ' + resp.status + '）')
+    const blob = await resp.blob()
+    if (!blob.size) throw new Error('取到的文件为空')
+    if (blob.size > MAX_FILE) {
+      throw new Error('文件过大（' + fmtSize(blob.size) + '），超过 500MB 上限')
+    }
+    const file = new File([blob], suggestFilename(currentVideo.value, 'video'), { type: 'video/mp4' })
+    emit('to-cutter', file)
+  } catch (err) {
+    console.error(err)
+    cleanIsError.value = true
+    cleanStatus.value = '取片去截取失败：' + (err?.message || err) + '；可改用上方「下载视频」存原片，再到截取页选文件。'
+  } finally {
+    cutBusy.value = false
+  }
 }
 
 // 一键流程：经代理取片 → 本机清洗（与净化页同一份逻辑）→ 直接保存净化版
@@ -530,6 +568,11 @@ async function cleanDownload() {
 .btn-secondary:hover {
   background: #e2e8f0;
   color: #0f172a;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .arrow {

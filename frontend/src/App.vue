@@ -39,6 +39,13 @@
         >
           🧽 视频去抬头净化 (防国内查重)
         </button>
+        <button
+          class="tab-btn"
+          :class="{ active: activeTab === 'cutter' }"
+          @click="activeTab = 'cutter'"
+        >
+          ✂️ 视频截取
+        </button>
       </div>
 
       <!-- 视图 1: 视频解析与下载 -->
@@ -55,7 +62,7 @@
         <Transition name="fade">
           <div v-if="result" class="result-area">
             <VideoCard :info="result" />
-            <FormatList :formats="result.formats" :title="result.title" />
+            <FormatList :formats="result.formats" :title="result.title" @to-cutter="handleToCutter" />
           </div>
         </Transition>
 
@@ -85,6 +92,11 @@
       <div v-show="activeTab === 'cleaner'" class="tab-content">
         <VideoCleaner />
       </div>
+
+      <!-- 视图 3: 视频截取（多段拼成一个） -->
+      <div v-show="activeTab === 'cutter'" class="tab-content">
+        <VideoCutter ref="cutterRef" />
+      </div>
     </main>
 
     <!-- 页脚 -->
@@ -106,8 +118,10 @@ import FormatList from './components/FormatList.vue'
 import UrlInput from './components/UrlInput.vue'
 import VideoCard from './components/VideoCard.vue'
 import VideoCleaner from './components/VideoCleaner.vue'
+import VideoCutter from './components/VideoCutter.vue'
 
 const urlInputRef = ref(null)
+const cutterRef = ref(null)
 const loading     = ref(false)
 const parseError  = ref('')
 const result      = ref(null)
@@ -129,6 +143,13 @@ async function handleParse(url) {
   } finally {
     loading.value = false
   }
+}
+
+// 下载页“取片去截取”：文件已经取到本机，直接递进截取页，不用重新选文件
+function handleToCutter(file) {
+  if (!file) return
+  activeTab.value = 'cutter'
+  cutterRef.value?.openWithFile(file)
 }
 </script>
 
